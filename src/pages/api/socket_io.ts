@@ -2,15 +2,16 @@ import { Server } from 'socket.io';
 import type { NextApiRequest } from 'next';
 import type { Server as HTTPServer } from 'http';
 import type { NextApiResponseServerIO } from '@/types/next';
+import { Countries } from '@/utils/countries';
+import { makeQuestion } from '@/utils/makeQuestion';
 
-const countries = [
-  { name: 'France', flag: '/flags/france.png' },
-  { name: 'Japan', flag: '/flags/japan.png' },
-  { name: 'Brazil', flag: '/flags/brazil.png' },
-];
+const countries = Countries;
 
 // In-memory store of rooms and users
 const rooms: Record<string, Record<string, string>> = {};
+const hosts: Record<string, string> = {};
+const question: Record<string, { answer: string; choices: string[] }> = {};
+const choices: Record<string, string[]> = {};
 
 const SocketHandler = (_: NextApiRequest, res: NextApiResponseServerIO) => {
   if (!res.socket.server.io) {
@@ -31,6 +32,7 @@ const SocketHandler = (_: NextApiRequest, res: NextApiResponseServerIO) => {
         // Init room
         if (!rooms[roomId]) rooms[roomId] = {};
         rooms[roomId][socket.id] = username;
+        if (!hosts[roomId]) hosts[roomId] = username;
 
         // Send full user list to the new user
         const allUsernames = Object.values(rooms[roomId]);
@@ -42,15 +44,22 @@ const SocketHandler = (_: NextApiRequest, res: NextApiResponseServerIO) => {
         console.log(`✅ ${username} joined room ${roomId}`);
       });
 
-      socket.on('startGame', ({ roomId }) => {
-        const question =
-          countries[Math.floor(Math.random() * countries.length)];
+      socket.on('startGame', async ({ roomId }) => {
+        const question = await makeQuestion(4, countries);
+        console.log(question);
         console.log(`🟢 Game started in room ${roomId}`);
-        io.to(roomId).emit('newQuestion', question);
+        io.to(roomId).emit('newQuestion', {
+          flag: question.answer.code,
+          choices: question.choices,
+        });
       });
 
       socket.on('disconnect', () => {
         const { roomId, username } = socket.data;
+        if (hosts[roomId] === username) {
+          delete hosts[roomId];
+          socket.to(roomId).emit('hostLeft');
+        }
         if (roomId && rooms[roomId]) {
           delete rooms[roomId][socket.id];
 
@@ -62,6 +71,12 @@ const SocketHandler = (_: NextApiRequest, res: NextApiResponseServerIO) => {
 
           console.log(`❌ ${username} left room ${roomId}`);
         }
+      });
+
+      socket.on('choicePicked', ({ roomId, choice }) => {
+        const { username } = socket.data;
+        socket.to(roomId).emit('userPickedChoice', { username, choice });
+        console.log(`🟡 ${username} picked ${choice} in room ${roomId}`);
       });
     });
   }
