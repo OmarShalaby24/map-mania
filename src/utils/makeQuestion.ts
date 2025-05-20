@@ -9,22 +9,22 @@ export const makeQuestion = async (
   numberOfChoices: number,
   countries: any[]
 ) => {
-  var options = [...countries];
-  var count = countries.length;
+  let options = [...countries];
+  let count = countries.length;
 
   const answer: CountryClass = options[Math.floor(Math.random() * count)];
   count--;
   options = options.filter((c) => c.code !== answer.code);
 
-  var choices: CountryClass[] = [answer];
-  for (var i = 0; i < numberOfChoices - 1; i++) {
-    var pickedCountry = options[Math.floor(Math.random() * count)];
-    var choice = pickedCountry;
+  let choices: CountryClass[] = [answer];
+  for (let i = 0; i < numberOfChoices - 1; i++) {
+    let pickedCountry = options[Math.floor(Math.random() * count)];
+    let choice = pickedCountry;
     count--;
     options = options.filter((c) => c.code !== pickedCountry.code);
     choices = [...choices, choice];
   }
-  var randomPositionForAnswer = Math.floor(Math.random() * 3);
+  let randomPositionForAnswer = Math.floor(Math.random() * 3);
   [choices[0], choices[randomPositionForAnswer]] = [
     choices[randomPositionForAnswer],
     choices[0],
@@ -37,17 +37,17 @@ export const makeQuiz = async (
   numberOfQuestions: number,
   countries: CountryClass[] | []
 ) => {
-  var answers: CountryClass[] = [];
-  var options: CountryClass[][] = [];
+  let answers: CountryClass[] = [];
+  let options: CountryClass[][] = [];
 
-  var quiz: {
+  let quiz: {
     answer: CountryClass;
     options: CountryClass[];
   }[] = [];
 
-  var answersCodes: string[] = [];
+  let answersCodes: string[] = [];
 
-  for (var i = 0; i < numberOfQuestions; i++) {
+  for (let i = 0; i < numberOfQuestions; i++) {
     const { answer, choices } = await makeQuestion(numberOfChoices, countries);
     if (answersCodes.includes(answer.code)) {
       i--;
