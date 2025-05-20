@@ -1,14 +1,14 @@
 export type RootStackParamList = {
   WelcomeScreen: undefined;
-  MainMenuScreen: {countries: CountryClass[]};
-  QuizScreen: {quiz: QuestionClass[]};
+  MainMenuScreen: { countries: CountryClass[] };
+  QuizScreen: { quiz: QuestionClass[] };
   ResultsScreen: {
     correctAnswersBadge: number;
     questionCounterBadge: number;
     timeCountDownBadge: number;
     results: ResultRecord[];
   };
-  FlagsScreen: {countries: CountryClass[]};
+  FlagsScreen: { countries: CountryClass[] };
   AboutScreen: undefined;
 };
 
@@ -20,6 +20,9 @@ export type CountryClass = {
   name: string;
   code: string;
   flag: string;
+  properties?: {
+    name: string;
+  };
 };
 export type QuestionClass = {
   answer: CountryClass;
