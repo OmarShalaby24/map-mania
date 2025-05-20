@@ -14,8 +14,10 @@ const eslintConfig = [
   {
     rules: {
       '@typescript-eslint/no-explicit-any': 'off',
-      '@typescript-eslint/no-unused-vars': 'off',
-      'no-var': 'off',
+      'no-var': 'error', // can also be "warn" or "off" if you're not ready to fix it
+      '@typescript-eslint/no-unused-vars': 'warn',
+      'react-hooks/exhaustive-deps': 'warn',
+      '@next/next/no-img-element': 'off', // if you're okay with using <img>
     },
   },
 ];

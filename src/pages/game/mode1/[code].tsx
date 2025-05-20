@@ -4,6 +4,7 @@ import { useRouter } from 'next/router';
 import { useUser } from '@/context/UserContext';
 import { Copy, Icon } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
+import Image from 'next/image';
 
 
 export default function Game() {
@@ -144,7 +145,7 @@ export default function Game() {
 
       {question && (
         <>
-          <img src={`https://flagcdn.com/w640/${question.flag}.png`} alt={question.flag} />
+          <Image src={`https://flagcdn.com/w640/${question.flag}.png`} width={200} height={130} alt={question.flag} />
           {question.choices.map((choice) => (
             <button
               disabled={answer !== "" ? true : false}
