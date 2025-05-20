@@ -7,10 +7,18 @@ import { makeQuestion } from '@/utils/makeQuestion';
 
 const countries = Countries;
 
+interface RoomState {
+  roomId: string;
+  started: boolean;
+  currentAnswer: string;
+  host: string;
+  choices: string[];
+}
+
 // In-memory store of rooms and users
 const rooms: Record<string, Record<string, string>> = {};
 const hosts: Record<string, string> = {};
-const question: Record<string, { answer: string; choices: string[] }> = {};
+const questions: Record<string, { answer: string }> = {};
 const choices: Record<string, string[]> = {};
 
 const SocketHandler = (_: NextApiRequest, res: NextApiResponseServerIO) => {
@@ -39,19 +47,25 @@ const SocketHandler = (_: NextApiRequest, res: NextApiResponseServerIO) => {
         socket.emit('roomUsers', allUsernames);
 
         // Notify others
-        socket.to(roomId).emit('userJoined', { username });
+        socket.to(roomId).emit('userJoined', { players: allUsernames });
 
         console.log(`✅ ${username} joined room ${roomId}`);
       });
 
+      socket.on('createRoom', ({ roomId }) => {
+        socket.join(roomId);
+        socket.data.roomId = roomId;
+        socket.emit('roomCreated', { roomId });
+        console.log(`✅ Room ${roomId} created by Host`);
+      });
+
       socket.on('startGame', async ({ roomId }) => {
-        const question = await makeQuestion(4, countries);
-        console.log(question);
         console.log(`🟢 Game started in room ${roomId}`);
-        io.to(roomId).emit('newQuestion', {
-          flag: question.answer.code,
-          choices: question.choices,
-        });
+        generateQuestion(roomId);
+      });
+
+      socket.on('nextQuestion', async ({ roomId, answer }) => {
+        generateQuestion(roomId);
       });
 
       socket.on('disconnect', () => {
@@ -75,9 +89,33 @@ const SocketHandler = (_: NextApiRequest, res: NextApiResponseServerIO) => {
 
       socket.on('choicePicked', ({ roomId, choice }) => {
         const { username } = socket.data;
+        if (!choices[roomId]) choices[roomId] = [];
+        choices[roomId].push(username);
+
+        const totalUsers = Object.keys(rooms[roomId] || {}).length;
+        if (choices[roomId].length === totalUsers) {
+          console.log(questions[roomId].answer);
+          io.to(roomId).emit('allUsersPicked', {
+            answer: questions[roomId].answer,
+          });
+          choices[roomId] = [];
+          setTimeout(() => {
+            generateQuestion(roomId);
+          }, 3000);
+        }
         socket.to(roomId).emit('userPickedChoice', { username, choice });
         console.log(`🟡 ${username} picked ${choice} in room ${roomId}`);
       });
+
+      const generateQuestion = async (roomId: string) => {
+        const question = await makeQuestion(4, countries);
+        console.log(question);
+        io.to(roomId).emit('newQuestion', {
+          flag: question.answer.code,
+          choices: question.choices,
+        });
+        questions[roomId] = { answer: question.answer.properties!.name };
+      };
     });
   }
 
