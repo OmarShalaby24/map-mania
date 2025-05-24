@@ -16,10 +16,16 @@ interface RoomState {
 }
 
 // In-memory store of rooms and users
+//                 roomId => { socketId => username }
 const rooms: Record<string, Record<string, string>> = {};
+//                roomId => username
 const hosts: Record<string, string> = {};
+//                roomId => { answer: string }
 const questions: Record<string, { answer: string }> = {};
+//                roomId => [username]
 const choices: Record<string, string[]> = {};
+//                roomId => { username => score }
+const scoreboard: Record<string, Record<string, number>> = {};
 
 const SocketHandler = (_: NextApiRequest, res: NextApiResponseServerIO) => {
   if (!res.socket.server.io) {
@@ -61,6 +67,7 @@ const SocketHandler = (_: NextApiRequest, res: NextApiResponseServerIO) => {
 
       socket.on('startGame', async ({ roomId }) => {
         console.log(`🟢 Game started in room ${roomId}`);
+        io.to(roomId).emit('gameStarted');
         generateQuestion(roomId);
       });
 
@@ -86,30 +93,77 @@ const SocketHandler = (_: NextApiRequest, res: NextApiResponseServerIO) => {
           console.log(`❌ ${username} left room ${roomId}`);
         }
       });
+      socket.on('checkRoom', (roomId, callback) => {
+        const exists = !!rooms[roomId];
+        callback(exists);
+      });
 
+      // this event is triggered when a user picks a choice
+      // it will check if all users have picked a choice
+      // after all users have picked a choice if loop in choices of the room and add score for correct answer
+      // then emit the answer and scores to all users
+      // then generate a new question
+      // socket.on('choicePicked', ({ roomId, choice }) => {
+      //   const { username } = socket.data;
+      //   if (!choices[roomId]) choices[roomId] = [];
+      //   choices[roomId].push(username);
+
+      //   const totalUsers = Object.keys(rooms[roomId] || {}).length;
+      //   if (choices[roomId].length === totalUsers) {
+      //     // console.log(questions[roomId].answer);
+      //     io.to(roomId).emit('allUsersPicked', {
+      //       answer: questions[roomId].answer,
+      //     });
+      //     // add score for correct answer
+      //     if (!scores[roomId]) scores[roomId] = {};
+      //     if (!scores[roomId][username]) scores[roomId][username] = 0;
+      //     if (questions[roomId].answer === choice) {
+      //       scores[roomId][username] += 1;
+      //     }
+
+      //     choices[roomId] = [];
+      //     setTimeout(() => {
+      //       generateQuestion(roomId);
+      //     }, 3000);
+      //   }
+      //   socket.to(roomId).emit('userPickedChoice', { username, choice });
+      //   console.log(`🟡 ${username} picked ${choice} in room ${roomId}`);
+      // });
       socket.on('choicePicked', ({ roomId, choice }) => {
-        const { username } = socket.data;
         if (!choices[roomId]) choices[roomId] = [];
-        choices[roomId].push(username);
+        choices[roomId].push(choice);
 
-        const totalUsers = Object.keys(rooms[roomId] || {}).length;
-        if (choices[roomId].length === totalUsers) {
-          console.log(questions[roomId].answer);
-          io.to(roomId).emit('allUsersPicked', {
-            answer: questions[roomId].answer,
+        const allChoices = choices[roomId];
+        const allUsernames = Object.values(rooms[roomId]);
+
+        if (allChoices.length === allUsernames.length) {
+          // All users have picked a choice
+          const correctAnswer = questions[roomId]?.answer;
+          const scoresForRoom = scoreboard[roomId] || {};
+
+          allUsernames.forEach((username, index) => {
+            if (!scoresForRoom[username]) scoresForRoom[username] = 0;
+            if (allChoices[index] === correctAnswer) {
+              scoresForRoom[username]++;
+            }
           });
-          choices[roomId] = [];
+          scoreboard[roomId] = scoresForRoom; // Update scores for the room
+          console.log({ scores: scoreboard });
+          io.to(roomId).emit('allUsersPicked', {
+            answer: correctAnswer,
+            scores: scoresForRoom,
+          });
+
+          choices[roomId] = []; // Reset choices for the next question
           setTimeout(() => {
             generateQuestion(roomId);
-          }, 3000);
+          }, 2000);
         }
-        socket.to(roomId).emit('userPickedChoice', { username, choice });
-        console.log(`🟡 ${username} picked ${choice} in room ${roomId}`);
       });
 
       const generateQuestion = async (roomId: string) => {
         const question = await makeQuestion(4, countries);
-        console.log(question);
+        // console.log(question);
         io.to(roomId).emit('newQuestion', {
           flag: question.answer.code,
           choices: question.choices,

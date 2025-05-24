@@ -2,9 +2,10 @@ import React, { useEffect, useState, useRef } from 'react';
 import socket from '@/utils/socket';
 import { useRouter } from 'next/router';
 import { useUser } from '@/context/UserContext';
-import { Copy, Icon } from 'lucide-react';
+import { Check, Copy } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 import Image from 'next/image';
+import { Table, TableBody, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
 
 export default function Game() {
@@ -63,6 +64,7 @@ export default function Game() {
     };
 
     const handleGameStarted = () => {
+      console.log("hehe")
       setGameStarted(true);
     }
 
@@ -99,6 +101,8 @@ export default function Game() {
       socket.off('userLeft', handleUserLeft);
       socket.off('gameStarted', handleGameStarted);
       socket.off('newQuestion', handleNewQuestion);
+      socket.off('allUsersPicked', handleAllUsersPicked);
+
     };
   }, [code, user?.userName]);
 
@@ -112,28 +116,61 @@ export default function Game() {
     socket.emit('choicePicked', { roomId: code, choice: ans });
   };
 
+  const [copied, setCopied] = useState(false);
+  const handleCopy = () => {
+    navigator.clipboard.writeText(code as string);
+    setCopied(true);
+    setTimeout(() => {
+      setCopied(false);
+    }, 2000);
+  };
+
   return (
     <div className="flex flex-col items-center justify-center min-h-screen gap-4">
       <div className="flex items-center justify-center gap-4">
         <p>Room: {code}</p>
-        <Copy size={15} onClick={() => { navigator.clipboard.writeText(code as string) }} />
+        {copied ?
+          <Check size={15} className="text-green-500" />
+          : <Copy size={15} onClick={handleCopy} />
+        }
       </div>
-      <p>Players:</p>
-      <ul className="list-disc">
-        {players && players.map((u, i) => (
-          <li key={i}>{u}</li>
-        ))}
-      </ul>
+      <div>
+
+        <Table>
+          <TableHeader>
+            <TableRow className='hover:bg-transparent'>
+              <TableHead className="text-left">Player</TableHead>
+              <TableHead className="text-left">Score</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {players && players.map((u, i) => (
+              <TableRow key={i} className="hover:bg-transparent text-align-center">
+                <td className="text-left">{u}</td>
+                <td className="text-left">0</td>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
       {
         (user?.isHost && !gameStarted) ?
           <button className="px-6 py-2 bg-green-600 text-white rounded hover:bg-green-500" onClick={handleStartGame}>Start Game</button>
           : (!gameStarted ? <p>Wait for host to start</p> : null)
       }
-      <Progress
-        value={roundTimer / 10 * 100}
-        className="w-48 h-2 bg-orange-500 rounded-full"
-      />
-      <p>{roundTimer} s</p>
+      {
+        gameStarted ?
+
+          <div className="flex items-center justify-center gap-4">
+            <Progress
+              value={(10 - roundTimer) / 10 * 100}
+              className="w-48 h-2 bg-orange-500 rounded-full"
+            />
+            <p>{roundTimer} s</p>
+
+          </div>
+          : null
+      }
       {/* <button
         className="px-6 py-2 bg-green-600 text-white rounded hover:bg-green-500"
         onClick={() => {
