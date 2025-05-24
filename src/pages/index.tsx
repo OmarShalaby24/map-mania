@@ -28,10 +28,28 @@ export default function Home() {
 
   const handleJoinGame = () => {
     const roomId = prompt("Enter the room ID you want to join:");
-    router.push({
-      pathname: `/game/mode1/${roomId}`
-    });
+    if (roomId && roomId?.length >= 6) {
+      checkRoomExists(roomId);
+    }
+    else if (!roomId) {
+      return;
+    } else {
+      alert("Invalid room ID");
+      return;
+    }
   };
+
+  const checkRoomExists = (roomId: string) => {
+    console.log("here")
+    socket.emit('checkRoom', roomId, (exists: boolean) => {
+      console.log({ exists })
+      if (exists) {
+        router.push(`/game/mode1/${roomId}`);
+      } else {
+        alert("Room does not exist");
+      }
+    });
+  }
 
 
   return (

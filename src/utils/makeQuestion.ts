@@ -12,7 +12,11 @@ export const makeQuestion = async (
   let options = [...countries];
   let count = countries.length;
 
-  const answer: CountryClass = options[Math.floor(Math.random() * count)];
+  let answer: CountryClass = { name: '', code: '', flag: 'xx' };
+  do {
+    answer = options[Math.floor(Math.random() * count)];
+  } while (answer.flag === 'xx');
+
   count--;
   options = options.filter((c) => c.code !== answer.code);
 
