@@ -26,6 +26,12 @@ const questions: Record<string, { answer: string }> = {};
 const choices: Record<string, string[]> = {};
 //                roomId => { username => score }
 const scoreboard: Record<string, Record<string, number>> = {};
+//                roomId => boolean
+const gameStarted: Record<string, boolean> = {};
+//                roomId => number
+const questionCount: Record<string, number> = {};
+
+const TOTAL_QUESTIONS = 10;
 
 const SocketHandler = (_: NextApiRequest, res: NextApiResponseServerIO) => {
   if (!res.socket.server.io) {
@@ -38,13 +44,22 @@ const SocketHandler = (_: NextApiRequest, res: NextApiResponseServerIO) => {
     io.on('connection', (socket) => {
       console.log(`🔌 Connected: ${socket.id}`);
 
-      socket.on('joinRoom', ({ roomId, username }) => {
+      socket.on('joinRoom', ({ roomId, username }, callback) => {
+        // Check if game is already started
+        if (gameStarted[roomId]) {
+          callback({ success: false, error: 'Game has already started' });
+          return;
+        }
+
         socket.join(roomId);
         socket.data.roomId = roomId;
         socket.data.username = username;
 
         // Init room
-        if (!rooms[roomId]) rooms[roomId] = {};
+        if (!rooms[roomId]) {
+          rooms[roomId] = {};
+          gameStarted[roomId] = false;
+        }
         rooms[roomId][socket.id] = username;
         if (!hosts[roomId]) hosts[roomId] = username;
 
@@ -67,6 +82,8 @@ const SocketHandler = (_: NextApiRequest, res: NextApiResponseServerIO) => {
 
       socket.on('startGame', async ({ roomId }) => {
         console.log(`🟢 Game started in room ${roomId}`);
+        gameStarted[roomId] = true;
+        questionCount[roomId] = 1;
         io.to(roomId).emit('gameStarted');
         generateQuestion(roomId);
       });
@@ -87,7 +104,13 @@ const SocketHandler = (_: NextApiRequest, res: NextApiResponseServerIO) => {
           socket.to(roomId).emit('userLeft', { username });
 
           if (Object.keys(rooms[roomId]).length === 0) {
-            delete rooms[roomId]; // Clean up empty room
+            // Clean up all room data when it becomes empty
+            delete rooms[roomId];
+            delete hosts[roomId];
+            delete questions[roomId];
+            delete choices[roomId];
+            delete scoreboard[roomId];
+            delete gameStarted[roomId];
           }
 
           console.log(`❌ ${username} left room ${roomId}`);
@@ -96,6 +119,23 @@ const SocketHandler = (_: NextApiRequest, res: NextApiResponseServerIO) => {
       socket.on('checkRoom', (roomId, callback) => {
         const exists = !!rooms[roomId];
         callback(exists);
+      });
+
+      socket.on('leaveRoom', ({ roomId, username }) => {
+        if (roomId && rooms[roomId]) {
+          delete rooms[roomId][socket.id];
+          socket.to(roomId).emit('userLeft', { username });
+
+          if (Object.keys(rooms[roomId]).length === 0) {
+            delete rooms[roomId];
+            delete hosts[roomId];
+            delete questions[roomId];
+            delete choices[roomId];
+            delete scoreboard[roomId];
+          }
+
+          console.log(`❌ ${username} left room ${roomId}`);
+        }
       });
 
       // this event is triggered when a user picks a choice
@@ -155,6 +195,10 @@ const SocketHandler = (_: NextApiRequest, res: NextApiResponseServerIO) => {
           });
 
           choices[roomId] = []; // Reset choices for the next question
+
+          // Increment question count
+          questionCount[roomId] = (questionCount[roomId] || 0) + 1;
+
           setTimeout(() => {
             generateQuestion(roomId);
           }, 2000);
@@ -162,11 +206,22 @@ const SocketHandler = (_: NextApiRequest, res: NextApiResponseServerIO) => {
       });
 
       const generateQuestion = async (roomId: string) => {
+        if (questionCount[roomId] > TOTAL_QUESTIONS) {
+          io.to(roomId).emit('newQuestion', {
+            flag: '',
+            choices: [],
+            questionNumber: TOTAL_QUESTIONS,
+            isGameOver: true,
+          });
+          return;
+        }
+
         const question = await makeQuestion(4, countries);
-        // console.log(question);
         io.to(roomId).emit('newQuestion', {
           flag: question.answer.code,
           choices: question.choices,
+          questionNumber: questionCount[roomId],
+          isGameOver: false,
         });
         questions[roomId] = { answer: question.answer.properties!.name };
       };

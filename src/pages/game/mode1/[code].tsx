@@ -6,9 +6,12 @@ import { Check, Copy } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 import Image from 'next/image';
 import { Table, TableBody, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { FinalScoresModal } from '@/components/FinalScoresModal';
 
 
 export default function Game() {
+  const [questionNumber, setQuestionNumber] = useState(0);
+  const [isGameOver, setIsGameOver] = useState(false);
   const router = useRouter();
   const { user } = useUser();
   const { code, userName } = router.query;
@@ -20,6 +23,7 @@ export default function Game() {
   const hasJoinedRef = useRef(false);
 
   const [correctAnswer, setCorrectAnswer] = useState("");
+  const [scores, setScores] = useState<Record<string, number>>({});
 
   const [roundTimer, setRoundTimer] = useState(10);
 
@@ -32,7 +36,6 @@ export default function Game() {
           console.log('time out');
           setAnswer("none");
           socket.emit('choicePicked', { roomId: code, choice: "none" });
-          // clearInterval(interval);
           return 0;
         }
         return prev > 0 ? prev - 1 : 0;
@@ -46,9 +49,22 @@ export default function Game() {
     if (!code || !user?.userName) return;
 
     if (!hasJoinedRef.current) {
-      socket.emit('joinRoom', { roomId: code, username: user.userName });
-      hasJoinedRef.current = true;
+      socket.emit('joinRoom', { roomId: code, username: user.userName }, (response: { success: boolean, error?: string }) => {
+        if (!response.success) {
+          alert('Cannot join: ' + response.error);
+          router.push('/lobby'); // Redirect to lobby if join fails
+          return;
+        }
+        hasJoinedRef.current = true;
+      });
     }
+
+    // Handle browser close/refresh
+    const handleBeforeUnload = () => {
+      socket.emit('leaveRoom', { roomId: code, username: user.userName });
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
 
     const handleRoomUsers = (userList: string[]) => {
       setPlayers(userList);
@@ -68,21 +84,23 @@ export default function Game() {
       setGameStarted(true);
     }
 
-    const handleNewQuestion = (newQuestion: { flag: string, choices: any[] }) => {
+    const handleNewQuestion = (newQuestion: { flag: string, choices: any[], questionNumber: number, isGameOver: boolean }) => {
       console.log("here")
       setAnswer("");
       setRoundTimer(10);
       setCorrectAnswer("");
       setQuestion(newQuestion);
+      setQuestionNumber(newQuestion.questionNumber);
+      if (newQuestion.isGameOver) {
+        setIsGameOver(true);
+      }
     };
 
-    const handleAllUsersPicked = (ans: any) => {
-      console.log(ans)
-      setCorrectAnswer(ans.answer);
+    const handleAllUsersPicked = (data: { answer: string, scores: Record<string, number> }) => {
+      console.log(data);
+      setCorrectAnswer(data.answer);
       setRoundTimer(0);
-
-      // setAnswer("");
-      // setQuestion(null);
+      setScores(data.scores);
     };
 
     socket.on('roomUsers', handleRoomUsers);
@@ -95,6 +113,9 @@ export default function Game() {
     return () => {
       // Emit leaveRoom when component unmounts or code/user changes
       socket.emit('leaveRoom', { roomId: code, username: user.userName });
+
+      // Remove the beforeunload event listener
+      window.removeEventListener('beforeunload', handleBeforeUnload);
 
       socket.off('roomUsers', handleRoomUsers);
       socket.off('userJoined', handleUserJoined);
@@ -125,8 +146,18 @@ export default function Game() {
     }, 2000);
   };
 
+  const renderScores = (players: string[]) => {
+    return players.map((player: string, index: number) => (
+      <TableRow key={index} className='hover:bg-transparent'>
+        <TableHead className="text-left">{player}</TableHead>
+        <TableHead className="text-center">{scores[player] || 0}</TableHead>
+      </TableRow>
+    ));
+  };
+
   return (
     <div className="flex flex-col items-center justify-center min-h-screen gap-4">
+      <FinalScoresModal scores={scores} isOpen={isGameOver} />
       <div className="flex items-center justify-center gap-4">
         <p>Room: {code}</p>
         {copied ?
@@ -134,6 +165,11 @@ export default function Game() {
           : <Copy size={15} onClick={handleCopy} />
         }
       </div>
+      {gameStarted && (
+        <div className="text-lg font-semibold">
+          Question {questionNumber}/10
+        </div>
+      )}
       <div>
 
         <Table>
@@ -144,12 +180,7 @@ export default function Game() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {players && players.map((u, i) => (
-              <TableRow key={i} className="hover:bg-transparent text-align-center">
-                <td className="text-left">{u}</td>
-                <td className="text-left">0</td>
-              </TableRow>
-            ))}
+            {players && renderScores(players)}
           </TableBody>
         </Table>
       </div>
@@ -171,14 +202,6 @@ export default function Game() {
           </div>
           : null
       }
-      {/* <button
-        className="px-6 py-2 bg-green-600 text-white rounded hover:bg-green-500"
-        onClick={() => {
-          socket.emit('nextQuestion', { roomId: code });
-        }}
-      >
-        Next
-      </button> */}
 
       {question && (
         <>
